@@ -3,17 +3,11 @@ Edit by Keisuke Oyamada @2018/04/19.
 For training bachelor.
 """
 
-import numpy as np
 import chainer
-import cupy
 import argparse
 import net
 from chainer import optimizers
-from chainer import serializers
-from tqdm import tqdm
-from chainer import functions as F
-import math
-import os
+from updater import update
 
 
 def main():
@@ -52,68 +46,20 @@ def main():
         chainer.backends.cuda.get_device_from_id(gpu).use()
         model.to_gpu()
 
-    xp = np if gpu < 0 else cupy
-
     opt = optimizers.Adam(1e-3)
     opt.setup(model)
 
-    for epoch in range(1, epochs+1):
-        perm = np.random.permutation(N)
-        sum_loss = 0.
-        sum_acc = 0.
+    updater = update(**{
+        "model": model,
+        "opt": opt,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "save_path": save_path,
+        "x": (x_train, x_test),
+        "y": [y_train, y_test],
+        })
 
-        print("epoch: {}".format(epoch))
-        bar = tqdm(desc="Training", total=math.ceil(N / batch_size), leave=False)
-
-        for i in range(0, N, batch_size):
-            x_v = chainer.Variable(xp.asarray(x_train[perm[i:i+batch_size]]))
-            y_v = chainer.Variable(xp.asarray(y_train[perm[i:i+batch_size]]))
-
-            y_h = model.forward(x_v)
-            loss = F.softmax_cross_entropy(y_h, y_v)
-            acc = F.accuracy(y_h, y_v)
-
-            model.cleargrads()
-            loss.backward()
-            opt.update()
-
-            loss.unchain_backward()
-            model.cleargrads()
-
-            sum_loss += float(loss.data) * len(x_v)
-            sum_acc += float(acc.data) * len(x_v)
-            bar.update()
-
-        bar.close()
-
-
-        print("train loss: {}".format(sum_loss / N), "train acc: {}".format(sum_acc / N))
-
-        bar = tqdm(desc="Test", total=math.ceil(N_test / batch_size), leave=False)
-        sum_loss_test = 0.
-        sum_acc_test = 0.
-        perm_test = np.random.permutation(N_test)
-        with chainer.using_config('train', False), chainer.no_backprop_mode():
-            for i in range(0, N_test, batch_size):
-                x_test_v = chainer.Variable(xp.asarray(x_test[perm_test[i:i+batch_size]]))
-                y_test_v = chainer.Variable(xp.asarray(y_test[perm_test[i:i+batch_size]]))
-
-                y_test_h = model.forward(x_test_v)
-                loss_test = F.softmax_cross_entropy(y_test_h, y_test_v)
-                acc_test = F.accuracy(y_test_h, y_test_v)
-                sum_loss_test += float(loss_test.data) * len(x_test_v)
-                sum_acc_test += float(acc_test.data) * len(x_test_v)
-                bar.update()
-
-        bar.close()
-        print("test loss: {}".format(sum_loss_test / N_test),
-              "test acc: {}".format(sum_acc_test / N_test))
-
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-
-    serializers.save_npz(os.path.join(save_path, "mnist_ex.model"), model)
-    serializers.save_npz(os.path.join(save_path, "mnist_ex.optimizer"), opt)
+    updater()
 
 
 if __name__ == "__main__":
