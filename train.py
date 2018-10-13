@@ -8,6 +8,7 @@ import argparse
 import net
 from chainer import optimizers
 from updater import update
+from collections import OrderedDict
 
 
 def main():
@@ -25,10 +26,8 @@ def main():
     save_path = args.save_path
 
     print("MNIST example")
-    print("epochs: {}".format(epochs))
-    print("gpu ID: {}".format(gpu))
-    print("batch size: {}".format(batch_size))
-    print("save path: {}".format(save_path))
+    for i in OrderedDict(args.__dict__):
+        print("{}: {}".format(i, getattr(args, i)))
 
     mnist_train, mnist_test = chainer.datasets.get_mnist()
     x_train, y_train = mnist_train._datasets
@@ -57,7 +56,7 @@ def main():
         "save_path": save_path,
         "x": (x_train, x_test),
         "y": [y_train, y_test],
-        })
+    })
 
     updater()
 
